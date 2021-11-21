@@ -1,3 +1,3 @@
 # vbo_proje
-This is project for VBO certification
+This is a project for VBO certification
 
