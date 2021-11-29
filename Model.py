@@ -1,4 +1,7 @@
 import warnings
+
+import pandas as pd
+
 warnings.simplefilter(action='ignore', category=Warning)
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.svm import SVR
@@ -20,84 +23,6 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.float_format', lambda x: '%.3f' % x)
 pd.set_option('display.width', 500)
 
-
-def hitters_prep():
-
-    df = pd.read_csv("Odev/data/hitters.csv")
-    df.columns = [col.upper() for col in df.columns]
-
-    ############# Handling missing values #############
-    # There's missing values only for target
-    df = df.dropna(how='any',subset=['SALARY'])
-
-    ############## Handling outliers #############
-    cat_cols, num_cols, cat_but_car = grab_col_names(df)
-    for col in num_cols:
-        print(col, check_outlier(df, col))
-    for col in num_cols:
-        replace_with_thresholds(df, col)
-    for col in num_cols:
-        print(col, check_outlier(df, col))
-
-    ############# Feature Engineering ###########
-
-    # to prevent infinity values
-    df = df.replace(0, 0.01)
-
-    # PLAYER LEVEL
-    df.loc[(df["YEARS"] <= 2), "NEW_YEARS_LEVEL"] = "Junior"
-    df.loc[(df["YEARS"] > 2) & (df['YEARS'] <= 5), "NEW_YEARS_LEVEL"] = "Mid"
-    df.loc[(df["YEARS"] > 5) & (df['YEARS'] <= 10), "NEW_YEARS_LEVEL"] = "Senior"
-    df.loc[(df["YEARS"] > 10), "NEW_YEARS_LEVEL"] = "Expert"
-
-    # CAREER RUNS RATIO
-    df["NEW_C_RUNS_RATIO"] = df["RUNS"] / df["CRUNS"]
-    # CAREER BAT RATIO
-    df["NEW_C_ATBAT_RATIO"] = df["ATBAT"] / df["CATBAT"]
-    # CAREER HITS RATIO
-    df["NEW_C_HITS_RATIO"] = df["HITS"] / df["CHITS"]
-    # CAREER HMRUN RATIO
-    df["NEW_C_HMRUN_RATIO"] = df["HMRUN"] / df["CHMRUN"]
-    # CAREER RBI RATIO
-    df["NEW_C_RBI_RATIO"] = df["RBI"] / df["CRBI"]
-    # CAREER WALKS RATIO
-    df["NEW_C_WALKS_RATIO"] = df["WALKS"] / df["CWALKS"]
-    df["NEW_C_HIT_RATE"] = df["CHITS"] / df["CATBAT"]
-    # PLAYER TYPE : RUNNER
-    df["NEW_C_RUNNER"] = df["CRBI"] / df["CHITS"]
-    # PLAYER TYPE : HIT AND RUN
-    df["NEW_C_HIT-AND-RUN"] = df["CRUNS"] / df["CHITS"]
-    # MOST VALUABLE HIT RATIO IN HITS
-    df["NEW_C_HMHITS_RATIO"] = df["CHMRUN"] / df["CHITS"]
-    # MOST VALUABLE HIT RATIO IN ALL SHOTS
-    df["NEW_C_HMATBAT_RATIO"] = df["CATBAT"] / df["CHMRUN"]
-
-    # PLayer Ratio in year
-    df["NEW_ASSISTS_RATIO"] = df["ASSISTS"] / df["ATBAT"]
-    df["NEW_HITS_RECALL"] = df["HITS"] / (df["HITS"] + df["ERRORS"])
-    df["NEW_NET_HELPFUL_ERROR"] = (df["WALKS"] - df["ERRORS"]) / df["WALKS"]
-    df["NEW_TOTAL_SCORE"] = (df["RBI"] + df["ASSISTS"] + df["WALKS"] - df["ERRORS"]) / df["ATBAT"]
-    df["NEW_HIT_RATE"] = df["HITS"] / df["ATBAT"]
-    df["NEW_TOUCHER"] = df["ASSISTS"] / df["PUTOUTS"]
-    df["NEW_RUNNER"] = df["RBI"] / df["HITS"]
-    df["NEW_HIT-AND-RUN"] = df["RUNS"] / (df["HITS"])
-    df["NEW_HMHITS_RATIO"] = df["HMRUN"] / df["HITS"]
-    df["NEW_HMATBAT_RATIO"] = df["ATBAT"] / df["HMRUN"]
-    df["NEW_TOTAL_CHANCES"] = df["ERRORS"] + df["PUTOUTS"] +df["ASSISTS"]
-
-
-    ############# Label Encoding  #############
-    binary_cols = [col for col in df.columns if df[col].dtype not in [int, float]
-                   and df[col].nunique() == 2]
-
-    for col in binary_cols:
-        df = label_encoder(df, col)
-
-    ############# One-Hot Encoding  #############
-    ohe_cols = [col for col in df.columns if 10 >= df[col].nunique() > 2]
-    df = one_hot_encoder(df, ohe_cols)
-
-    return df
 
 
 def define_regressors():
@@ -215,7 +140,7 @@ def plot_importance(model, features, num, save=False):
 
 
 if __name__ == "__main__":
-    df = hitters_prep()
+    df = pd.read_pickle('pickles/X_data_train.pkl')
     regressors = define_regressors()
     best_models, ensemble_model = train_tune(df,
                                              cv=10, scoring="neg_mean_squared_error")
