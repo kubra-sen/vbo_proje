@@ -1,6 +1,24 @@
-import warnings
-
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier, AdaBoostClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_validate, GridSearchCV
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+
+from sklearn.preprocessing import StandardScaler
+from helpers.eda import *
+from helpers.data_prep import *
+
+# !pip install catboost
+# !pip install lightgbm
+# !pip install xgboost
+
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from catboost import CatBoostClassifier
+from sklearn.metrics import  roc_curve, auc
+from sklearn.metrics import  recall_score, precision_score, f1_score
 
 warnings.simplefilter(action='ignore', category=Warning)
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
@@ -25,47 +43,44 @@ pd.set_option('display.width', 500)
 
 
 
-def define_regressors():
+def define_classifiers():
 
-    base_models = [('LR', LinearRegression()),
-                   ("Ridge", Ridge()),
-                   ("Lasso", Lasso()),
-                   ("ElasticNet", ElasticNet()),
-                   ('KNN', KNeighborsRegressor()),
-                   ('CART', DecisionTreeRegressor()),
-                   ('RF', RandomForestRegressor()),
-                   ('SVR', SVR()),
-                   ('GBM', GradientBoostingRegressor()),
-                   ("XGBoost", XGBRegressor(objective='reg:squarederror')),
-                   ("LightGBM", LGBMRegressor()),
-                   # ("CatBoost", CatBoostRegressor(verbose=False))
+    base_models = [('LR', LogisticRegression()),
+                   ('KNN', KNeighborsClassifier()),
+                   ("SVC", SVC()),
+                   ("CART", DecisionTreeClassifier()),
+                   ("RF", RandomForestClassifier()),
+                   ('Adaboost', AdaBoostClassifier()),
+                   ('GBM', GradientBoostingClassifier()),
+                   ('XGBoost', XGBClassifier()),
+                   ('LightGBM', LGBMClassifier()),
+                   # ('CatBoost', CatBoostClassifier(verbose=False))
                    ]
 
-    rf_params = {"max_depth": [3,5,7,None],
-                 "max_features": [5, 7, "auto"],
-                 "min_samples_split": [8, 15, 20],
-                 "n_estimators": [100,150,200]}
+    knn_params = {"n_neighbors": range(2, 50)}
 
-    xgboost_params = {"learning_rate": [0.1, 0.01, 0.01],
-                      "max_depth": [5, 8, 12, 20],
-                      "n_estimators": [100, 200, 300, 500],
-                      "colsample_bytree": [0.5, 0.8, 1]}
+    cart_params = {'max_depth': range(1, 20),
+               "min_samples_split": range(2, 30)}
 
-    lightgbm_params = {"learning_rate": [0.01, 0.1, 0.001],
-                       "n_estimators": [300, 500, 1500],
-                       "colsample_bytree": [0.5, 0.7, 1]}
+    rf_params = {"max_depth": [5, 8, 15, None],
+             "max_features": [5, 7, "auto"],
+             "min_samples_split": [8, 15, 20],
+             "n_estimators": [200, 500, 1000]}
 
-    gbm_params = {"learning_rate": [0.01, 0.1],
-                  "max_depth": [3, 8],
-                  "n_estimators": [500, 1000],
-                  "subsample": [1, 0.5, 0.7]}
+    xgboost_params = {"learning_rate": [0.1, 0.01],
+                  "max_depth": [5, 8, 12, 20],
+                  "n_estimators": [100, 200],
+                  "colsample_bytree": [0.5, 0.8, 1]}
 
-    regressors = [
-        ("RF", RandomForestRegressor(), rf_params),
-        ('XGBoost', XGBRegressor(objective='reg:squarederror'), xgboost_params),
-        ('LightGBM', LGBMRegressor(), lightgbm_params),
-        ("GBM", GradientBoostingRegressor(), gbm_params)
-    ]
+    lightgbm_params = {"learning_rate": [0.01, 0.1],
+                   "n_estimators": [300, 500, 1500],
+                   "colsample_bytree": [0.5, 0.7, 1]}
+
+    classifiers = [('KNN', KNeighborsClassifier(), knn_params),
+               ("CART", DecisionTreeClassifier(), cart_params),
+               ("RF", RandomForestClassifier(), rf_params),
+               ('XGBoost', XGBClassifier(), xgboost_params),
+               ('LightGBM', LGBMClassifier(), lightgbm_params)]
     return base_models, regressors
 
 
@@ -80,7 +95,7 @@ def train_tune(df,cv=10, scoring="neg_mean_squared_error"):
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.fit_transform(X_test)
 
-    base_models, regressors= define_regressors()
+    base_models, classifiers= define_classifiers()
 
     print("Base Models....")
     for name, model in base_models:
@@ -90,18 +105,18 @@ def train_tune(df,cv=10, scoring="neg_mean_squared_error"):
     print("Hyperparameter Optimization....")
     best_models = {}
 
-    for name, regressor, params in regressors:
+    for name, classifier, params in classifiers:
         print(f"########## {name} ##########")
-        rmse = np.mean(np.sqrt(-cross_val_score(regressor, X_train, y_train, cv=cv, scoring=scoring)))
-        print(f"RMSE: {round(rmse, 4)} ({name}) ")
+        cv_results = cross_validate(classifier, X, y, cv=3, scoring=["roc_auc"])
+        print(f"AUC (Before): {round(cv_results['test_roc_auc'].mean(),4)}")
 
-        gs_best = GridSearchCV(regressor, params, cv=10, scoring="neg_mean_squared_error",
-                               n_jobs=-1, verbose=False).fit(X_train, y_train)
-        final_model = regressor.set_params(**gs_best.best_params_).fit(X_train, y_train)
-        rmse = np.mean(np.sqrt(-cross_val_score(final_model, X_train, y_train, cv=cv, scoring=scoring)))
-        print (np.sqrt(-cross_val_score(final_model, X_train, y_train, cv=cv, scoring=scoring)))
-        print(f"RMSE (After tuning): {round(rmse, 4)} ({name}) ")
-        print(f"{name} best params: {gs_best.best_params_}")
+
+        gs_best = GridSearchCV(classifier, params, cv=3, n_jobs=-1, verbose=False).fit(X, y)
+        final_model = classifier.set_params(**gs_best.best_params_)
+
+        cv_results = cross_validate(final_model, X, y, cv=3, scoring=["roc_auc"])
+        print(f"AUC (After): {round(cv_results['test_roc_auc'].mean(), 4)}")
+        print(f"{name} best params: {gs_best.best_params_}", end="\n\n")
 
         best_models[name] = final_model
 
@@ -110,20 +125,31 @@ def train_tune(df,cv=10, scoring="neg_mean_squared_error"):
         pickle.dump(best_models[name], open(filename, 'wb'))
 
     print(f"########## Ensemble Model ##########")
-    voting_reg = VotingRegressor(estimators=[('RF', best_models["RF"]), ('LightGBM', best_models["LightGBM"])])
+    voting_clf = VotingClassifier(
+        estimators=[('XGBoost', best_models["XGBoost"]),
+                    ('RF', best_models["RF"]),
+                    ('LightGBM', best_models["LightGBM"])],
+        voting='soft')
 
-    voting_reg.fit(X_train, y_train)
-    rmse = np.mean(np.sqrt(-cross_val_score(voting_reg, X_train, y_train, cv=cv, scoring=scoring)))
-    print(f"RMSE for CV: {round(rmse, 4)} ")
+    voting_clf.fit(X_train, y_train)
 
-    y_pred = voting_reg.predict(X_test)
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    print(f"RMSE for Test: {round(rmse, 4)} ({'Ensemble of RF and GBM'})")
+    cv_results = cross_validate(voting_clf, X, y, cv=3, scoring=["accuracy", "f1", "roc_auc"])
+    acc = cv_results['test_accuracy'].mean()
+    f1 = cv_results['test_f1'].mean()
+    roc = cv_results['test_roc_auc'].mean()
+    print(f"Accuracy for CV: {round(acc, 4)} ")
+
+    y_pred = voting_clf.predict(X_test)
+    test_acc = voting_clf.score(X_test, y_test)
+    precision = round(precision_score(y_test, y_pred), 4)
+    recall = round(recall_score(y_test, y_pred), 4)
+    f1 = round(f1_score(y_test, y_pred, average = 'macro') ,4)
+    print(f"RMSE for Test: {round(test_acc, 4)} ({'Ensemble of RF and GBM'})")
 
     filename = 'finalized_model' + str('voting') + '.sav'
-    pickle.dump(voting_reg, open(filename, 'wb'))
+    pickle.dump(voting_clf, open(filename, 'wb'))
 
-    return best_models, voting_reg
+    return best_models, voting_clf
 
 
 def plot_importance(model, features, num, save=False):
@@ -141,7 +167,7 @@ def plot_importance(model, features, num, save=False):
 
 if __name__ == "__main__":
     df = pd.read_pickle('pickles/X_data_train.pkl')
-    regressors = define_regressors()
+    regressors = define_classifiers()
     best_models, ensemble_model = train_tune(df,
                                              cv=10, scoring="neg_mean_squared_error")
 

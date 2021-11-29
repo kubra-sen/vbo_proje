@@ -968,23 +968,29 @@ Y_data_train = pd.read_pickle('pickles/Y_data_train')
 
 ## E.Obtaining the Dataframe from only the Top 500 Important Features
 
-X_train_final_arr = np.nan_to_num(X_train_final_hcdr_new)
-X_cv_final_arr = np.nan_to_num(X_cv_final_hcdr_new)
+
+X_train_final = X_train_final.astype(np.uint8,errors='ignore')
+
+X_train_final_arr = np.nan_to_num(X_train_final)
+X_cv_final_arr = np.nan_to_num(X_cv_final)
 
 S = SelectKBest(f_classif, k=500)
 
-X_train_k_best = S.fit_transform(X_train_final_arr, Y_train_final_hcdr_new)
+X_train_k_best = S.fit_transform(X_train_final_arr, Y_train_final)
 X_cv_k_best = S.transform(X_cv_final_arr)
 
 # Get columns to keep and create new dataframe with those only
 cols = S.get_support(indices=True)
 
-features_top_df_train = X_train_final_hcdr_new.iloc[:,cols]
-features_top_df_cv = X_cv_final_hcdr_new.iloc[:,cols]
+features_top_df_train = X_train_final.iloc[:,cols]
+features_top_df_cv = X_cv_final.iloc[:,cols]
 
 if not os.path.isfile('pickles/features_top_df_train.pkl'):
     features_top_df_train.to_pickle('pickles/features_top_df_train.pkl')
 features_top_df_train = pd.read_pickle('pickles/features_top_df_train.pkl')
+
+
+
 
 
 ## F.Standardising the final dataset obtained
@@ -1075,3 +1081,4 @@ def plot_confusion_matrix(test_y, predict_y):
 ########################################################################
 # MACHINE LEARNING MODELLING
 ########################################################################
+
