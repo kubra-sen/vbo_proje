@@ -8,21 +8,19 @@
 
 import warnings
 warnings.filterwarnings("ignore")
-
-import pandas as pd
-import matplotlib.pyplot as plt
-import re
-import time
-import numpy as np
 import gc
-import seaborn as sns
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import f_classif
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from datetime import datetime
+warnings.simplefilter(action='ignore', category=Warning)
 
+from sklearn.model_selection import train_test_split
+import pickle
+print(pickle.format_version)
+
+from helpers.data_prep import *
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.float_format', lambda x: '%.3f' % x)
+pd.set_option('display.width', 500)
 
 ########################################################################
 # Reduce Memory Usage
@@ -966,112 +964,3 @@ if not os.path.isfile('pickles/Y_data_train'):
     Y_data_train.to_pickle('pickles/Y_data_train')
 Y_data_train = pd.read_pickle('pickles/Y_data_train')
 
-## E.Obtaining the Dataframe from only the Top 500 Important Features
-
-X_train_final_arr = np.nan_to_num(X_train_final_hcdr_new)
-X_cv_final_arr = np.nan_to_num(X_cv_final_hcdr_new)
-
-S = SelectKBest(f_classif, k=500)
-
-X_train_k_best = S.fit_transform(X_train_final_arr, Y_train_final_hcdr_new)
-X_cv_k_best = S.transform(X_cv_final_arr)
-
-# Get columns to keep and create new dataframe with those only
-cols = S.get_support(indices=True)
-
-features_top_df_train = X_train_final_hcdr_new.iloc[:,cols]
-features_top_df_cv = X_cv_final_hcdr_new.iloc[:,cols]
-
-if not os.path.isfile('pickles/features_top_df_train.pkl'):
-    features_top_df_train.to_pickle('pickles/features_top_df_train.pkl')
-features_top_df_train = pd.read_pickle('pickles/features_top_df_train.pkl')
-
-
-## F.Standardising the final dataset obtained
-
-scaler = StandardScaler()
-
-features_top_df_test = test_data[features_top_df_train.columns]
-features_top_df_test_final = np.nan_to_num(features_top_df_test)
-features_top_df_cv_final = np.nan_to_num(features_top_df_cv)
-
-scaler.fit(features_top_df_train)
-scaler_train = scaler.transform(features_top_df_train)
-scaler_cv = scaler.transform(features_top_df_cv_final)
-scaler_test = scaler.transform(features_top_df_test_final)
-
-Y_train_final_hcdr_new = np.nan_to_num(Y_train_final_hcdr_new)
-Y_cv_final_hcdr_new = np.nan_to_num(Y_cv_final_hcdr_new)
-
-scaler_train = np.nan_to_num(scaler_train)
-scaler_cv = np.nan_to_num(scaler_cv)
-scaler_test = np.nan_to_num(scaler_test)
-
-
-## G. Defining some functions before modelling
-
-### batch_predict function
-
-def batch_predict(clf, data):
-    y_data_pred = []
-    loop_count = data.shape[0] - data.shape[0] % 1000
-
-    for i in range(0, loop_count, 1000):
-        y_data_pred.extend(clf.predict_proba(data[i:i + 1000])[:, 1])
-
-    y_data_pred.extend(clf.predict_proba(data[loop_count:])[:, 1])
-
-    return y_data_pred
-
-### obtain_threshold function
-
-def obtain_threshold(thresholds, tpr, fpr):
-    obtain_threshold.best_tradeoff = tpr * (1 - fpr)
-    ideal_threshold = thresholds[obtain_threshold.best_tradeoff.argmax()]
-
-    return ideal_threshold
-
-### plot_confussion_matrix function
-
-def plot_confusion_matrix(test_y, predict_y):
-    C = confusion_matrix(test_y, predict_y)
-
-    A = (((C.T) / (C.sum(axis=1))).T)
-
-    B = (C / C.sum(axis=0))
-
-    plt.figure(figsize=(20, 4))
-
-    labels = [0, 1]
-
-    cmap = sns.light_palette("blue")
-    plt.subplot(1, 3, 1)
-    sns.set(font_scale=1.1)
-    sns.set_style(style='white')
-
-    sns.heatmap(C, annot=True, cmap=cmap, fmt=".10f", xticklabels=labels, \
-                yticklabels=labels)
-    plt.xlabel('Predicted Class')
-    plt.ylabel('Original Class')
-    plt.title("Confusion matrix")
-
-    plt.subplot(1, 3, 2)
-    sns.heatmap(B, annot=True, cmap=cmap, fmt=".10f", xticklabels=labels, \
-                yticklabels=labels)
-    plt.xlabel('Predicted Class')
-    plt.ylabel('Original Class')
-    plt.title("Precision matrix")
-
-    plt.subplot(1, 3, 3)
-    # representing B in heatmap format
-    sns.heatmap(A, annot=True, cmap=cmap, fmt=".10f", xticklabels=labels, \
-                yticklabels=labels)
-    plt.xlabel('Predicted Class')
-    plt.ylabel('Original Class')
-    plt.title("Recall matrix")
-
-    plt.show()
-
-########################################################################
-# MACHINE LEARNING MODELLING
-########################################################################
