@@ -4,7 +4,6 @@
 import pandas as pd
 import numpy as np
 import warnings
-warnings.filterwarnings("ignore")
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,12 +12,13 @@ from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import f_classif
 from datetime import datetime
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier, AdaBoostClassifier
 from lightgbm import LGBMClassifier
 from sklearn.metrics import  recall_score, precision_score, f1_score
+from sklearn.model_selection import GridSearchCV, cross_validate,validation_curve
+from sklearn.ensemble import RandomForestClassifier
 warnings.simplefilter(action='ignore', category=Warning)
-from sklearn.model_selection import GridSearchCV, cross_validate
-from xgboost import XGBClassifier
 
 #############################################################
 # FEATURE SELECTION
@@ -35,7 +35,7 @@ Y_cv_final_hcdr_new = pd.read_pickle('pickles/Y_cv_final_hcdr_new')
 X_train_final_arr = np.nan_to_num(X_train_final_hcdr_new)
 X_cv_final_arr = np.nan_to_num(X_cv_final_hcdr_new)
 
-S = SelectKBest(f_classif, k=100)
+S = SelectKBest(f_classif, k=20)
 
 X_train_k_best = S.fit_transform(X_train_final_arr, Y_train_final_hcdr_new)
 X_cv_k_best = S.transform(X_cv_final_arr)
@@ -58,8 +58,8 @@ features_top_df_train = pd.read_pickle('pickles/features_top_df_train.pkl')
 def define_classifiers():
 
     base_models = [
-        ("LGBM", LGBMClassifier(),
-         "XGBoost",XGBClassifier())
+        ("LGBM", LGBMClassifier()),
+        ("RF",RandomForestClassifier())
     ]
 
     rf_params = {"max_depth": [5, 8, 15, None],
@@ -83,18 +83,18 @@ def define_classifiers():
                  "intercept_scaling": [1, 2, 3, 4]}
 
     classifiers = [ ('LGBM', LGBMClassifier(), lightgbm_params),
-                    ('XGBoost', XGBClassifier(), xgboost_params)]
+                    ('RF', RandomForestClassifier(), rf_params)]
     return base_models, classifiers
 
 
-def train_tune(X_train, y_train, X_cv, y_cv,cv=3, scoring=["roc_auc"]):
+def train_tune(X_train, y_train, X_cv, y_cv, cv=3, scoring=["roc_auc"]):
 
     base_models, classifiers = define_classifiers()
 
     print("Base Models....")
     for name, model in base_models:
-        cv_results = cross_validate(model, X_train, y_train, cv=3, scoring=scoring)
-        print(f"AUC (Before): {round(cv_results['test_roc_auc'].mean(),4)}")
+        cv_results = cross_validate(model, X_train, y_train, cv=3, scoring=["roc_auc"])
+        print(f"AUC (Before): {round(cv_results['test_roc_auc'].mean(),4)}({name})")
 
 
     print("Hyperparameter Optimization....")
@@ -106,7 +106,7 @@ def train_tune(X_train, y_train, X_cv, y_cv,cv=3, scoring=["roc_auc"]):
         gs_best = GridSearchCV(classifier, params, cv=3, n_jobs=-1, verbose=False).fit(X_train, y_train)
         final_model = classifier.set_params(**gs_best.best_params_)
 
-        cv_results = cross_validate(final_model, X_train, y_train, cv=cv, scoring=scoring)
+        cv_results = cross_validate(final_model, X_train, y_train, cv=cv, scoring=["roc_auc"])
         print(f"ROCAUC (After): {round(cv_results['test_roc_auc'].mean(), 4)}({name})")
         print(f"{name} best params: {gs_best.best_params_}", end="\n\n")
 
@@ -137,6 +137,8 @@ def train_tune(X_train, y_train, X_cv, y_cv,cv=3, scoring=["roc_auc"]):
     f1 = round(f1_score(y_cv, y_pred) ,4)
     print(f"Test Results: {round(test_acc, 4), round(precision, 4),round(recall, 4),round(f1, 4)} ({'Ensemble of XGBoost and LGBM'})")
 
+    print(classification_report(y_cv, y_pred))
+
     # TO-DO : Confusion Matrix
     return best_models, voting_clf
 
@@ -152,6 +154,27 @@ def plot_importance(model, features, num, save=False):
     plt.show()
     if save:
         plt.savefig('importances.png')
+
+
+def val_curve_params(model, X, y, param_name, param_range, scoring="roc_auc", cv=10):
+    train_score, test_score = validation_curve(
+        model, X=X, y=y, param_name=param_name, param_range=param_range, scoring=scoring, cv=cv)
+
+    mean_train_score = np.mean(train_score, axis=1)
+    mean_test_score = np.mean(test_score, axis=1)
+
+    plt.plot(param_range, mean_train_score,
+             label="Training Score", color='b')
+
+    plt.plot(param_range, mean_test_score,
+             label="Validation Score", color='g')
+
+    plt.title(f"Validation Curve for {type(model).__name__}")
+    plt.xlabel(f"Number of {param_name}")
+    plt.ylabel(f"{scoring}")
+    plt.tight_layout()
+    plt.legend(loc='best')
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -179,4 +202,9 @@ if __name__ == "__main__":
 
     best_models, ensemble_model = train_tune(scaler_X_train,Y_train,scaler_X_cv,Y_cv,
                                              cv=3, scoring=["roc_auc"])
+
+
+    val_curve_params(ensemble_model, scaler_X_train, Y_train, "max_depth", range(1, 11))
+
+
 

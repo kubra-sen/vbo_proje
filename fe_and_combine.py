@@ -7,15 +7,10 @@
 ########################################################################
 
 import warnings
-warnings.filterwarnings("ignore")
 import gc
 from datetime import datetime
-warnings.simplefilter(action='ignore', category=Warning)
-
 from sklearn.model_selection import train_test_split
 import pickle
-print(pickle.format_version)
-
 from helpers.data_prep import *
 
 pd.set_option('display.max_columns', None)
@@ -865,7 +860,7 @@ train_data_temp_2.shape
 ############################################
 
 ## A.Duplicate Feature Removals
-# Removing any duplicate fatures, if any are present in the final dataset
+# Removing any duplicate features, if any are present in the final dataset
 train_data = train_data_temp_2.loc[:,~train_data_temp_2.columns.duplicated()]
 train_data.shape
 
