@@ -206,5 +206,5 @@ if __name__ == "__main__":
 
     val_curve_params(ensemble_model, scaler_X_train, Y_train, "max_depth", range(1, 11))
 
-
+    plot_importance(ensemble_model, scaler_X_train, len(scaler_X_train), save=False)
 
